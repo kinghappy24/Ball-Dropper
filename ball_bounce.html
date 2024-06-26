@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ball Bounce Animation</title>
+    <style>
+        body { margin: 0; display: flex; }
+        canvas { background: black; cursor: crosshair; flex-grow: 1; }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            background: #333;
+            color: white;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        .controls input, .controls button, .controls label, .controls select {
+            margin-bottom: 10px;
+        }
+        .controls button, .controls select {
+            padding: 5px;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+        }
+        .slider-container input {
+            flex: 1;
+            margin: 0 10px;
+        }
+        .toggle-button.active {
+            background-color: #4CAF50;
+        }
+        .toggle-button.inactive {
+            background-color: #f44336;
+        }
+        .position-chooser {
+            display: none;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+        .position-chooser input {
+            margin: 5px 0;
+        }
+        .properties {
+            display: none;
+            flex-direction: column;
+            padding: 10px;
+            background: #444;
+            color: white;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .properties.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button id="innerBallsBtn">Inner Balls</button>
+        <button id="outerPartBtn">Outer Part</button>
+        <button id="simulationBtn">Simulation</button>
+        <button id="effectsBtn">Effects</button>
+        <button id="trailBtn">Trail</button>
+        <button id="musicBtn">Music</button>
+        <button id="emitterBtn">Emitter</button>
+        <button id="bounceSettingsBtn">Bounce Settings</button>
+        <button id="positionBtn">Position</button>
+        <button id="start">Start</button>
+        <button id="reset">Reset</button>
+        <div>Bounce Count: <span id="bounceCounter">0</span></div>
+    </div>
+    <div id="properties" class="properties"></div>
+    <div class="position-chooser" id="positionChooser">
+        <label for="startX">Start X:</label>
+        <input id="startX" type="number" value="0">
+        <label for="startY">Start Y:</label>
+        <input id="startY" type="number" value="0">
+        <button id="applyPosition">Apply</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth - 500;
+        canvas.height = window.innerHeight;
+
+        let balls = [];
+        let initialAngle = 0;
+        let delay = 500;
+        let running = false;
+        let shape = 'circle';
+        let strokeColor = '#800080';
+        let strokeThickness = 5;
+        let circleSize = 460;
+        let ballColor = '#00ff00';
+        let ballStrokeThickness = 2;
+        let ballSize = 1;
+        let growthRate = 8;
+        let gravity = 0.55;
+        let speed = 3;
+        let showLine = false;
+        let enableLine = false;
+        let showTrail = false;
+        let trailColor = '#00ff00';
+        let trailThickness = 2;
+        let trailDuration = 500;
+        let fadeOut = false;
+        let fadeDuration = 500;
+        let gravityOff = false;
+        let gravityOffTime = 5000;
+        let trail = [];
+        let choosePosition = false;
+        let startX = canvas.width / 2;
+        let startY = canvas.height / 2;
+        let strokeRainbow = false;
+        let ballRainbow = false;
+        let trailRainbow = false;
+        let strokeRainbowSpeed = 50;
+        let ballRainbowSpeed = 50;
+        let trailRainbowSpeed = 50;
+        let rainbowColorOffset = 0;
+        let ballCount = 1;
+        let ballImage = null;
+        let useBallImage = false;
+        let ballShape = 'circle';
+        let glowEffect = false;
+        let bloomEffect = false;
+        let ropeEffect = false;
+        let ropeColor = '#ff0000';
+        let ropeRainbow = false;
+        let ropeRainbowSpeed = 50;
+        let bounceSound = null;
+        let useBounceSound = false;
+        let usePitchIncrease = false;
+        let pitchIncrease = 0.01;
+        let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let trailImage = null;
+        let useTrailImage = false;
+        let bounceCounter = 0;
+
+        // Emitter properties
+        let emitterEnabled = false;
+        let emitterShape = 'circle';
+        let emitterSize = 10;
+        let emitterSizeOverLife = 5;
+        let emitterColor = '#ffffff';
+        let emitterColorOverLife = '#000000';
+        let emitterSpeed = 1;
+        let emitterImage = null;
+        let useEmitterImage = false;
+        let emitAllTime = false;
+        let emitBounce = true;
+
+        // Bounce settings
+        let bounceIntensity = 1;
+        let ballWeight = 1;
+        let slowOverTime = false;
+        let variableBouncePower = false;
+        let bounceAfterCount = 3;
+        let toggleGrowth = true;
+        let toggleSpeed = false;
+
+        function createBalls(count) {
+            balls = [];
+            for (let i = 0; i < count; i++) {
+                let initialSpeed = speed + i * 0.2;
+                let angle = initialAngle * (Math.PI / 180);
+                balls.push({
+                    x: startX,
+                    y: startY,
+                    radius: ballSize,
+                    dx: Math.cos(angle) * initialSpeed,
+                    dy: Math.sin(angle) * initialSpeed,
+                    color: ballColor,
+                    speed: initialSpeed,
+                    initial: true,
+                    distance: 0,
+                    bounces: 0,
+                    ropes: []
+                });
+            }
+        }
+
+        function drawShape() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = strokeThickness;
+
+            if (shape === 'circle') {
+                ctx.arc(canvas.width / 2, canvas.height / 2, circleSize, 0, Math.PI * 2);
+            } else if (shape === 'triangle') {
+                const height = Math.sqrt(3) / 2 * (circleSize * 2);
+                ctx.moveTo(canvas.width / 2, canvas.height / 2 - circleSize);
+                ctx.lineTo(canvas.width / 2 - circleSize, canvas.height / 2 + height / 2);
+                ctx.lineTo(canvas.width / 2 + circleSize, canvas.height / 2 + height / 2);
+                ctx.closePath();
+            } else if (shape === 'square') {
+                ctx.rect(canvas.width / 2 - circleSize, canvas.height / 2 - circleSize, circleSize * 2, circleSize * 2);
+            } else if (shape === 'star') {
+                const outerRadius = circleSize;
+                const innerRadius = outerRadius / 2.5;
+                ctx.moveTo(canvas.width / 2, canvas.height / 2 - outerRadius);
+                for (let i = 1; i < 10; i++) {
+                    const angle = Math.PI / 5 * i;
+                    const r = i % 2 === 0 ? outerRadius : innerRadius;
+                    ctx.lineTo(
+                        canvas.width / 2 + r * Math.sin(angle),
+                        canvas.height / 2 - r * Math.cos(angle)
+                    );
+                }
+                ctx.closePath();
+            }
+
+            ctx.stroke();
+        }
+
+        function drawBall(ball) {
+            ctx.beginPath();
+            if (useBallImage && ballImage) {
+                ctx.save();
+                if (ballShape === 'circle') {
+                    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                } else if (ballShape === 'square') {
+                    ctx.rect(ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2);
+                }
+                ctx.clip();
+                ctx.drawImage(ballImage, ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2);
+                ctx.restore();
+            } else {
+                if (ballShape === 'circle') {
+                    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                } else if (ballShape === 'square') {
+                    ctx.rect(ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2);
+                }
+                ctx.fillStyle = ball.color;
+                ctx.lineWidth = ballStrokeThickness;
+                ctx.strokeStyle = ball.color;
+                ctx.fill();
+                ctx.stroke();
+            }
+            ctx.closePath();
+        }
+
+        function updateBall(ball) {
+            if (enableLine && ball.initial) {
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                ball.distance += ball.speed;
+                if (ball.distance >= circleSize / 3) {
+                    ball.initial = false;
+                }
+            } else {
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                if (!gravityOff) {
+                    ball.dy += gravity;
+                }
+            }
+
+            if (shape === 'circle') {
+                const distFromCenter = Math.sqrt((ball.x - canvas.width / 2) ** 2 + (ball.y - canvas.height / 2) ** 2);
+                if (distFromCenter + ball.radius >= circleSize) {
+                    let angle = Math.atan2(ball.y - canvas.height / 2, ball.x - canvas.width / 2);
+                    let currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+
+                    ball.dx = -Math.cos(angle) * currentSpeed + (Math.random() - 0.25) * 0.1;
+                    ball.dy = -Math.sin(angle) * currentSpeed + (Math.random() - 0.25) * 0.1;
+
+                    if (toggleGrowth) {
+                        ball.radius *= 1 + growthRate / 100;
+                    }
+                    if (toggleSpeed) {
+                        ball.speed *= 1 + growthRate / 100;
+                    }
+
+                    ball.bounces += 1;
+                    bounceCounter += 1;
+                    document.getElementById('bounceCounter').textContent = bounceCounter;
+
+                    ball.x = canvas.width / 2 + (circleSize - ball.radius) * Math.cos(angle);
+                    ball.y = canvas.height / 2 + (circleSize - ball.radius) * Math.sin(angle);
+
+                    if (ropeEffect) {
+                        ball.ropes.push({ x: ball.x, y: ball.y });
+                    }
+
+                    if (useBounceSound && bounceSound) {
+                        let source = audioContext.createBufferSource();
+                        source.buffer = bounceSound;
+                        if (usePitchIncrease) {
+                            source.playbackRate.value = 1 + ball.bounces * pitchIncrease;
+                        }
+                        source.connect(audioContext.destination);
+                        source.start(0);
+                    }
+
+                    if (emitterEnabled && emitBounce) {
+                        createEmitter(ball.x, ball.y);
+                    }
+                }
+            }
+
+            if (showTrail) {
+                trail.push({ x: ball.x, y: ball.y, radius: ball.radius, color: trailColor, time: Date.now() });
+            }
+
+            if (emitterEnabled && emitAllTime) {
+                createEmitter(ball.x, ball.y);
+            }
+        }
+
+        function drawTrajectoryLine() {
+            let angle = initialAngle * (Math.PI / 180);
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(startX + Math.cos(angle) * 300, startY + Math.sin(angle) * 300);
+            ctx.strokeStyle = 'yellow';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function drawTrail() {
+            const now = Date.now();
+            trail = trail.filter(segment => now - segment.time <= trailDuration);
+            trail.forEach(segment => {
+                ctx.beginPath();
+                if (useTrailImage && trailImage) {
+                    ctx.save();
+                    ctx.arc(segment.x, segment.y, segment.radius, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.drawImage(trailImage, segment.x - segment.radius, segment.y - segment.radius, segment.radius * 2, segment.radius * 2);
+                    ctx.restore();
+                } else {
+                    ctx.arc(segment.x, segment.y, segment.radius, 0, Math.PI * 2);
+                    if (fadeOut) {
+                        const alpha = 1 - (now - segment.time) / fadeDuration;
+                        ctx.fillStyle = `rgba(${parseInt(segment.color.slice(1, 3), 16)},${parseInt(segment.color.slice(3, 5), 16)},${parseInt(segment.color.slice(5, 7), 16)},${alpha})`;
+                    } else {
+                        ctx.fillStyle = segment.color;
+                    }
+                    ctx.lineWidth = trailThickness;
+                    ctx.strokeStyle = segment.color;
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.closePath();
+            });
+        }
+
+        function drawRopes(ball) {
+            if (ropeEffect) {
+                ctx.strokeStyle = ropeRainbow ? getRainbowColor(ropeRainbowSpeed) : ropeColor;
+                ctx.lineWidth = 1;
+                ball.ropes.forEach((rope) => {
+                    ctx.beginPath();
+                    ctx.moveTo(rope.x, rope.y);
+                    ctx.lineTo(ball.x, ball.y);
+                    ctx.stroke();
+                    ctx.closePath();
+                });
+            }
+        }
+
+        function createEmitter(x, y) {
+            // Emitter logic to create particles at the given position (x, y)
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawShape();
+            if (showLine && enableLine) {
+                drawTrajectoryLine();
+            }
+            if (showTrail) {
+                drawTrail();
+            }
+            balls.forEach(ball => {
+                drawRopes(ball);
+                drawBall(ball);
+                updateBall(ball);
+            });
+            requestAnimationFrame(animate);
+
+            // Update rainbow colors
+            if (strokeRainbow) {
+                strokeColor = getRainbowColor(strokeRainbowSpeed);
+            }
+            if (ballRainbow) {
+                balls.forEach(ball => ball.color = getRainbowColor(ballRainbowSpeed));
+            }
+            if (trailRainbow) {
+                trailColor = getRainbowColor(trailRainbowSpeed);
+            }
+            rainbowColorOffset++;
+        }
+
+        function getRainbowColor(speed) {
+            const frequency = 0.3;
+            const red = Math.sin(frequency * rainbowColorOffset + 0) * 127 + 128;
+            const green = Math.sin(frequency * rainbowColorOffset + 2 * Math.PI / 3) * 127 + 128;
+            const blue = Math.sin(frequency * rainbowColorOffset + 4 * Math.PI / 3) * 127 + 128;
+            return `rgb(${Math.round(red)},${Math.round(green)},${Math.round(blue)})`;
+        }
+
+        function showProperties(category) {
+            const properties = document.getElementById('properties');
+            properties.innerHTML = '';
+            properties.classList.remove('active');
+
+            if (category === 'innerBalls') {
+                properties.innerHTML = `
+                    <label for="ballCount">Number of balls:</label>
+                    <input id="ballCount" type="number" placeholder="Number of balls" min="1" value="${ballCount}">
+                    <label for="ballColor">Ball color:</label>
+                    <input id="ballColor" type="color" value="${ballColor}">
+                    <button id="toggleBallRainbow" class="toggle-button ${ballRainbow ? 'active' : 'inactive'}">Toggle Rainbow</button>
+                    <label for="ballRainbowSpeed">Rainbow Speed:</label>
+                    <input id="ballRainbowSpeed" type="range" min="1" max="100" value="${ballRainbowSpeed}">
+                    <label for="ballStrokeThickness">Ball Stroke Thickness:</label>
+                    <div class="slider-container">
+                        <input id="ballStrokeThickness" type="range" min="1" max="20" value="${ballStrokeThickness}">
+                        <span id="ballStrokeThicknessValue">${ballStrokeThickness}</span>
+                    </div>
+                    <label for="ballSize">Ball start size:</label>
+                    <div class="slider-container">
+                        <input id="ballSize" type="range" min="1" max="100" value="${ballSize}">
+                        <span id="ballSizeValue">${ballSize}</span>
+                    </div>
+                    <label for="growthRate">Ball growth rate (% per hit):</label>
+                    <div class="slider-container">
+                        <input id="growthRate" type="range" min="1" max="50" value="${growthRate}">
+                        <span id="growthRateValue">${growthRate}%</span>
+                    </div>
+                    <label for="ballShape">Ball Shape:</label>
+                    <select id="ballShape">
+                        <option value="circle" ${ballShape === 'circle' ? 'selected' : ''}>Circle</option>
+                        <option value="square" ${ballShape === 'square' ? 'selected' : ''}>Square</option>
+                    </select>
+                    <label for="ballImage">Ball Image:</label>
+                    <input id="ballImage" type="file">
+                    <button id="toggleBallImage" class="toggle-button ${useBallImage ? 'active' : 'inactive'}">Use Image</button>
+                `;
+                document.getElementById('ballCount').addEventListener('input', (event) => {
+                    ballCount = parseInt(event.target.value);
+                });
+                document.getElementById('ballColor').addEventListener('input', (event) => {
+                    ballColor = event.target.value;
+                });
+                document.getElementById('toggleBallRainbow').addEventListener('click', (event) => {
+                    ballRainbow = !ballRainbow;
+                    event.target.classList.toggle('active', ballRainbow);
+                    event.target.classList.toggle('inactive', !ballRainbow);
+                });
+                document.getElementById('ballRainbowSpeed').addEventListener('input', (event) => {
+                    ballRainbowSpeed = parseInt(event.target.value);
+                });
+                document.getElementById('ballStrokeThickness').addEventListener('input', (event) => {
+                    ballStrokeThickness = parseInt(event.target.value);
+                    document.getElementById('ballStrokeThicknessValue').textContent = ballStrokeThickness;
+                });
+                document.getElementById('ballSize').addEventListener('input', (event) => {
+                    ballSize = parseInt(event.target.value);
+                    document.getElementById('ballSizeValue').textContent = ballSize;
+                });
+                document.getElementById('growthRate').addEventListener('input', (event) => {
+                    growthRate = parseInt(event.target.value);
+                    document.getElementById('growthRateValue').textContent = `${growthRate}%`;
+                });
+                document.getElementById('ballShape').addEventListener('input', (event) => {
+                    ballShape = event.target.value;
+                });
+                document.getElementById('ballImage').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const img = new Image();
+                        img.onload = () => {
+                            ballImage = img;
+                        };
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                document.getElementById('toggleBallImage').addEventListener('click', (event) => {
+                    useBallImage = !useBallImage;
+                    event.target.classList.toggle('active', useBallImage);
+                    event.target.classList.toggle('inactive', !useBallImage);
+                });
+            } else if (category === 'outerPart') {
+                properties.innerHTML = `
+                    <label for="strokeColor">Stroke color:</label>
+                    <input id="strokeColor" type="color" value="${strokeColor}">
+                    <button id="toggleStrokeRainbow" class="toggle-button ${strokeRainbow ? 'active' : 'inactive'}">Toggle Rainbow</button>
+                    <label for="strokeRainbowSpeed">Rainbow Speed:</label>
+                    <input id="strokeRainbowSpeed" type="range" min="1" max="100" value="${strokeRainbowSpeed}">
+                    <label for="strokeThickness">Stroke thickness:</label>
+                    <div class="slider-container">
+                        <input id="strokeThickness" type="range" min="1" max="20" value="${strokeThickness}">
+                        <span id="strokeThicknessValue">${strokeThickness}</span>
+                    </div>
+                    <label for="circleSize">Circle size:</label>
+                    <div class="slider-container">
+                        <input id="circleSize" type="range" min="100" max="960" value="${circleSize}">
+                        <span id="circleSizeValue">${circleSize}</span>
+                    </div>
+                `;
+                document.getElementById('strokeColor').addEventListener('input', (event) => {
+                    strokeColor = event.target.value;
+                });
+                document.getElementById('toggleStrokeRainbow').addEventListener('click', (event) => {
+                    strokeRainbow = !strokeRainbow;
+                    event.target.classList.toggle('active', strokeRainbow);
+                    event.target.classList.toggle('inactive', !strokeRainbow);
+                });
+                document.getElementById('strokeRainbowSpeed').addEventListener('input', (event) => {
+                    strokeRainbowSpeed = parseInt(event.target.value);
+                });
+                document.getElementById('strokeThickness').addEventListener('input', (event) => {
+                    strokeThickness = parseInt(event.target.value);
+                    document.getElementById('strokeThicknessValue').textContent = strokeThickness;
+                });
+                document.getElementById('circleSize').addEventListener('input', (event) => {
+                    circleSize = parseInt(event.target.value);
+                    document.getElementById('circleSizeValue').textContent = circleSize;
+                });
+            } else if (category === 'simulation') {
+                properties.innerHTML = `
+                    <label for="angle">Initial angle (degrees):</label>
+                    <input id="angle" type="range" min="0" max="180" value="${initialAngle}">
+                    <span id="angleValue">${initialAngle}°</span>
+                    <label for="delay">Delay between balls (ms):</label>
+                    <input id="delay" type="number" placeholder="Delay in ms" min="0" value="${delay}">
+                    <label for="gravity">Gravity:</label>
+                    <div class="slider-container">
+                        <input id="gravity" type="range" min="0.1" max="2" step="0.1" value="${gravity}">
+                        <span id="gravityValue">${gravity}</span>
+                    </div>
+                    <label for="speed">Initial speed:</label>
+                    <div class="slider-container">
+                        <input id="speed" type="range" min="1" max="10" value="${speed}">
+                        <span id="speedValue">${speed}</span>
+                    </div>
+                `;
+                document.getElementById('angle').addEventListener('input', (event) => {
+                    initialAngle = parseInt(event.target.value);
+                    document.getElementById('angleValue').textContent = `${initialAngle}°`;
+                });
+                document.getElementById('delay').addEventListener('input', (event) => {
+                    delay = parseInt(event.target.value);
+                });
+                document.getElementById('gravity').addEventListener('input', (event) => {
+                    gravity = parseFloat(event.target.value);
+                    document.getElementById('gravityValue').textContent = gravity;
+                });
+                document.getElementById('speed').addEventListener('input', (event) => {
+                    speed = parseFloat(event.target.value);
+                    document.getElementById('speedValue').textContent = speed;
+                });
+            } else if (category === 'trail') {
+                properties.innerHTML = `
+                    <label for="trailColor">Trail color:</label>
+                    <input id="trailColor" type="color" value="${trailColor}">
+                    <button id="toggleTrailRainbow" class="toggle-button ${trailRainbow ? 'active' : 'inactive'}">Toggle Rainbow</button>
+                    <label for="trailRainbowSpeed">Rainbow Speed:</label>
+                    <input id="trailRainbowSpeed" type="range" min="1" max="100" value="${trailRainbowSpeed}">
+                    <label for="trailThickness">Trail Stroke Thickness:</label>
+                    <div class="slider-container">
+                        <input id="trailThickness" type="range" min="1" max="20" value="${trailThickness}">
+                        <span id="trailThicknessValue">${trailThickness}</span>
+                    </div>
+                    <label for="trailDuration">Trail duration (ms):</label>
+                    <input id="trailDuration" type="number" placeholder="Trail duration in ms" min="100" value="${trailDuration}">
+                    <button id="toggleFade" class="toggle-button ${fadeOut ? 'active' : 'inactive'}">Toggle Fade Out</button>
+                    <label for="fadeDuration">Fade duration (ms):</label>
+                    <input id="fadeDuration" type="number" placeholder="Fade duration in ms" min="100" value="${fadeDuration}">
+                    <label for="trailImage">Trail Image:</label>
+                    <input id="trailImage" type="file">
+                    <button id="toggleTrailImage" class="toggle-button ${useTrailImage ? 'active' : 'inactive'}">Use Trail Image</button>
+                    <button id="toggleTrail" class="toggle-button ${showTrail ? 'active' : 'inactive'}">Toggle Trail</button>
+                `;
+                document.getElementById('trailColor').addEventListener('input', (event) => {
+                    trailColor = event.target.value;
+                });
+                document.getElementById('toggleTrailRainbow').addEventListener('click', (event) => {
+                    trailRainbow = !trailRainbow;
+                    event.target.classList.toggle('active', trailRainbow);
+                    event.target.classList.toggle('inactive', !trailRainbow);
+                });
+                document.getElementById('trailRainbowSpeed').addEventListener('input', (event) => {
+                    trailRainbowSpeed = parseInt(event.target.value);
+                });
+                document.getElementById('trailThickness').addEventListener('input', (event) => {
+                    trailThickness = parseInt(event.target.value);
+                    document.getElementById('trailThicknessValue').textContent = trailThickness;
+                });
+                document.getElementById('trailDuration').addEventListener('input', (event) => {
+                    trailDuration = parseInt(event.target.value);
+                });
+                document.getElementById('toggleFade').addEventListener('click', (event) => {
+                    fadeOut = !fadeOut;
+                    event.target.classList.toggle('active', fadeOut);
+                    event.target.classList.toggle('inactive', !fadeOut);
+                });
+                document.getElementById('fadeDuration').addEventListener('input', (event) => {
+                    fadeDuration = parseInt(event.target.value);
+                });
+                document.getElementById('trailImage').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const img = new Image();
+                        img.onload = () => {
+                            trailImage = img;
+                        };
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                document.getElementById('toggleTrailImage').addEventListener('click', (event) => {
+                    useTrailImage = !useTrailImage;
+                    event.target.classList.toggle('active', useTrailImage);
+                    event.target.classList.toggle('inactive', !useTrailImage);
+                });
+                document.getElementById('toggleTrail').addEventListener('click', (event) => {
+                    showTrail = !showTrail;
+                    event.target.classList.toggle('active', showTrail);
+                    event.target.classList.toggle('inactive', !showTrail);
+                });
+            } else if (category === 'effects') {
+                properties.innerHTML = `
+                    <button id="toggleGlow" class="toggle-button ${glowEffect ? 'active' : 'inactive'}">Toggle Glow</button>
+                    <button id="toggleBloom" class="toggle-button ${bloomEffect ? 'active' : 'inactive'}">Toggle Bloom</button>
+                    <label for="ropeColor">Rope Color:</label>
+                    <input id="ropeColor" type="color" value="${ropeColor}">
+                    <button id="toggleRopeRainbow" class="toggle-button ${ropeRainbow ? 'active' : 'inactive'}">Toggle Rainbow</button>
+                    <label for="ropeRainbowSpeed">Rainbow Speed:</label>
+                    <input id="ropeRainbowSpeed" type="range" min="1" max="100" value="${ropeRainbowSpeed}">
+                    <button id="toggleRope" class="toggle-button ${ropeEffect ? 'active' : 'inactive'}">Toggle Rope Effect</button>
+                `;
+                document.getElementById('toggleGlow').addEventListener('click', (event) => {
+                    glowEffect = !glowEffect;
+                    event.target.classList.toggle('active', glowEffect);
+                    event.target.classList.toggle('inactive', !glowEffect);
+                });
+                document.getElementById('toggleBloom').addEventListener('click', (event) => {
+                    bloomEffect = !bloomEffect;
+                    event.target.classList.toggle('active', bloomEffect);
+                    event.target.classList.toggle('inactive', !bloomEffect);
+                });
+                document.getElementById('ropeColor').addEventListener('input', (event) => {
+                    ropeColor = event.target.value;
+                });
+                document.getElementById('toggleRopeRainbow').addEventListener('click', (event) => {
+                    ropeRainbow = !ropeRainbow;
+                    event.target.classList.toggle('active', ropeRainbow);
+                    event.target.classList.toggle('inactive', !ropeRainbow);
+                });
+                document.getElementById('ropeRainbowSpeed').addEventListener('input', (event) => {
+                    ropeRainbowSpeed = parseInt(event.target.value);
+                });
+                document.getElementById('toggleRope').addEventListener('click', (event) => {
+                    ropeEffect = !ropeEffect;
+                    event.target.classList.toggle('active', ropeEffect);
+                    event.target.classList.toggle('inactive', !ropeEffect);
+                });
+            } else if (category === 'music') {
+                properties.innerHTML = `
+                    <label for="bounceSound">Bounce Sound:</label>
+                    <input id="bounceSound" type="file">
+                    <button id="toggleBounceSound" class="toggle-button ${useBounceSound ? 'active' : 'inactive'}">Use Bounce Sound</button>
+                    <button id="togglePitchIncrease" class="toggle-button ${usePitchIncrease ? 'active' : 'inactive'}">Toggle Pitch Increase</button>
+                    <label for="pitchIncrease">Pitch Increase per Bounce:</label>
+                    <div class="slider-container">
+                        <input id="pitchIncrease" type="range" min="0.01" max="2.00" step="0.01" value="${pitchIncrease}">
+                        <span id="pitchIncreaseValue">${pitchIncrease}</span>
+                    </div>
+                `;
+                document.getElementById('bounceSound').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            audioContext.decodeAudioData(e.target.result, (buffer) => {
+                                bounceSound = buffer;
+                            });
+                        };
+                        reader.readAsArrayBuffer(file);
+                    }
+                });
+                document.getElementById('toggleBounceSound').addEventListener('click', (event) => {
+                    useBounceSound = !useBounceSound;
+                    event.target.classList.toggle('active', useBounceSound);
+                    event.target.classList.toggle('inactive', !useBounceSound);
+                });
+                document.getElementById('togglePitchIncrease').addEventListener('click', (event) => {
+                    usePitchIncrease = !usePitchIncrease;
+                    event.target.classList.toggle('active', usePitchIncrease);
+                    event.target.classList.toggle('inactive', !usePitchIncrease);
+                });
+                document.getElementById('pitchIncrease').addEventListener('input', (event) => {
+                    pitchIncrease = parseFloat(event.target.value);
+                    document.getElementById('pitchIncreaseValue').textContent = pitchIncrease;
+                });
+            } else if (category === 'emitter') {
+                properties.innerHTML = `
+                    <button id="toggleEmitter" class="toggle-button ${emitterEnabled ? 'active' : 'inactive'}">Toggle Emitter</button>
+                    <label for="emitterShape">Emitter Shape:</label>
+                    <select id="emitterShape">
+                        <option value="circle" ${emitterShape === 'circle' ? 'selected' : ''}>Circle</option>
+                        <option value="square" ${emitterShape === 'square' ? 'selected' : ''}>Square</option>
+                    </select>
+                    <label for="emitterSize">Emitter Size:</label>
+                    <div class="slider-container">
+                        <input id="emitterSize" type="range" min="1" max="100" value="${emitterSize}">
+                        <span id="emitterSizeValue">${emitterSize}</span>
+                    </div>
+                    <label for="emitterSizeOverLife">Size Over Life:</label>
+                    <div class="slider-container">
+                        <input id="emitterSizeOverLife" type="range" min="1" max="100" value="${emitterSizeOverLife}">
+                        <span id="emitterSizeOverLifeValue">${emitterSizeOverLife}</span>
+                    </div>
+                    <label for="emitterColor">Emitter Color:</label>
+                    <input id="emitterColor" type="color" value="${emitterColor}">
+                    <label for="emitterColorOverLife">Color Over Life:</label>
+                    <input id="emitterColorOverLife" type="color" value="${emitterColorOverLife}">
+                    <label for="emitterSpeed">Emitter Speed:</label>
+                    <div class="slider-container">
+                        <input id="emitterSpeed" type="range" min="1" max="10" value="${emitterSpeed}">
+                        <span id="emitterSpeedValue">${emitterSpeed}</span>
+                    </div>
+                    <label for="emitterImage">Emitter Image:</label>
+                    <input id="emitterImage" type="file">
+                    <button id="toggleEmitterImage" class="toggle-button ${useEmitterImage ? 'active' : 'inactive'}">Use Emitter Image</button>
+                    <button id="toggleEmitAllTime" class="toggle-button ${emitAllTime ? 'active' : 'inactive'}">Emit All Time</button>
+                    <button id="toggleEmitBounce" class="toggle-button ${emitBounce ? 'active' : 'inactive'}">Emit Per Bounce</button>
+                `;
+                document.getElementById('toggleEmitter').addEventListener('click', (event) => {
+                    emitterEnabled = !emitterEnabled;
+                    event.target.classList.toggle('active', emitterEnabled);
+                    event.target.classList.toggle('inactive', !emitterEnabled);
+                });
+                document.getElementById('emitterShape').addEventListener('input', (event) => {
+                    emitterShape = event.target.value;
+                });
+                document.getElementById('emitterSize').addEventListener('input', (event) => {
+                    emitterSize = parseInt(event.target.value);
+                    document.getElementById('emitterSizeValue').textContent = emitterSize;
+                });
+                document.getElementById('emitterSizeOverLife').addEventListener('input', (event) => {
+                    emitterSizeOverLife = parseInt(event.target.value);
+                    document.getElementById('emitterSizeOverLifeValue').textContent = emitterSizeOverLife;
+                });
+                document.getElementById('emitterColor').addEventListener('input', (event) => {
+                    emitterColor = event.target.value;
+                });
+                document.getElementById('emitterColorOverLife').addEventListener('input', (event) => {
+                    emitterColorOverLife = event.target.value;
+                });
+                document.getElementById('emitterSpeed').addEventListener('input', (event) => {
+                    emitterSpeed = parseInt(event.target.value);
+                    document.getElementById('emitterSpeedValue').textContent = emitterSpeed;
+                });
+                document.getElementById('emitterImage').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const img = new Image();
+                        img.onload = () => {
+                            emitterImage = img;
+                        };
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                document.getElementById('toggleEmitterImage').addEventListener('click', (event) => {
+                    useEmitterImage = !useEmitterImage;
+                    event.target.classList.toggle('active', useEmitterImage);
+                    event.target.classList.toggle('inactive', !useEmitterImage);
+                });
+                document.getElementById('toggleEmitAllTime').addEventListener('click', (event) => {
+                    emitAllTime = !emitAllTime;
+                    event.target.classList.toggle('active', emitAllTime);
+                    event.target.classList.toggle('inactive', !emitAllTime);
+                });
+                document.getElementById('toggleEmitBounce').addEventListener('click', (event) => {
+                    emitBounce = !emitBounce;
+                    event.target.classList.toggle('active', emitBounce);
+                    event.target.classList.toggle('inactive', !emitBounce);
+                });
+            } else if (category === 'bounceSettings') {
+                properties.innerHTML = `
+                    <label for="bounceIntensity">Bounce Intensity:</label>
+                    <div class="slider-container">
+                        <input id="bounceIntensity" type="range" min="0.1" max="2" step="0.1" value="${bounceIntensity}">
+                        <span id="bounceIntensityValue">${bounceIntensity}</span>
+                    </div>
+                    <label for="ballWeight">Ball Weight:</label>
+                    <div class="slider-container">
+                        <input id="ballWeight" type="range" min="1" max="10" value="${ballWeight}">
+                        <span id="ballWeightValue">${ballWeight}</span>
+                    </div>
+                    <button id="toggleSlowOverTime" class="toggle-button ${slowOverTime ? 'active' : 'inactive'}">Toggle Slow Over Time</button>
+                    <label for="bounceAfterCount">Bounce After Count:</label>
+                    <div class="slider-container">
+                        <input id="bounceAfterCount" type="number" min="1" max="10" value="${bounceAfterCount}">
+                        <span id="bounceAfterCountValue">${bounceAfterCount}</span>
+                    </div>
+                    <button id="toggleGrowth" class="toggle-button ${toggleGrowth ? 'active' : 'inactive'}">Toggle Growth</button>
+                    <button id="toggleSpeed" class="toggle-button ${toggleSpeed ? 'active' : 'inactive'}">Toggle Speed</button>
+                `;
+                document.getElementById('bounceIntensity').addEventListener('input', (event) => {
+                    bounceIntensity = parseFloat(event.target.value);
+                    document.getElementById('bounceIntensityValue').textContent = bounceIntensity;
+                });
+                document.getElementById('ballWeight').addEventListener('input', (event) => {
+                    ballWeight = parseFloat(event.target.value);
+                    document.getElementById('ballWeightValue').textContent = ballWeight;
+                });
+                document.getElementById('toggleSlowOverTime').addEventListener('click', (event) => {
+                    slowOverTime = !slowOverTime;
+                    event.target.classList.toggle('active', slowOverTime);
+                    event.target.classList.toggle('inactive', !slowOverTime);
+                });
+                document.getElementById('bounceAfterCount').addEventListener('input', (event) => {
+                    bounceAfterCount = parseInt(event.target.value);
+                    document.getElementById('bounceAfterCountValue').textContent = bounceAfterCount;
+                });
+                document.getElementById('toggleGrowth').addEventListener('click', (event) => {
+                    toggleGrowth = !toggleGrowth;
+                    event.target.classList.toggle('active', toggleGrowth);
+                    event.target.classList.toggle('inactive', !toggleGrowth);
+                });
+                document.getElementById('toggleSpeed').addEventListener('click', (event) => {
+                    toggleSpeed = !toggleSpeed;
+                    event.target.classList.toggle('active', toggleSpeed);
+                    event.target.classList.toggle('inactive', !toggleSpeed);
+                });
+            } else if (category === 'position') {
+                properties.innerHTML = `
+                    <button id="togglePositionChooser" class="toggle-button ${choosePosition ? 'active' : 'inactive'}">Choose Start Position</button>
+                `;
+                document.getElementById('togglePositionChooser').addEventListener('click', (event) => {
+                    choosePosition = !choosePosition;
+                    const positionChooser = document.getElementById('positionChooser');
+                    positionChooser.style.display = choosePosition ? 'flex' : 'none';
+                    event.target.classList.toggle('active', choosePosition);
+                    event.target.classList.toggle('inactive', !choosePosition);
+                });
+            }
+            properties.classList.add('active');
+        }
+
+        document.getElementById('innerBallsBtn').addEventListener('click', () => showProperties('innerBalls'));
+        document.getElementById('outerPartBtn').addEventListener('click', () => showProperties('outerPart'));
+        document.getElementById('simulationBtn').addEventListener('click', () => showProperties('simulation'));
+        document.getElementById('trailBtn').addEventListener('click', () => showProperties('trail'));
+        document.getElementById('effectsBtn').addEventListener('click', () => showProperties('effects'));
+        document.getElementById('musicBtn').addEventListener('click', () => showProperties('music'));
+        document.getElementById('emitterBtn').addEventListener('click', () => showProperties('emitter'));
+        document.getElementById('bounceSettingsBtn').addEventListener('click', () => showProperties('bounceSettings'));
+        document.getElementById('positionBtn').addEventListener('click', () => showProperties('position'));
+
+        document.getElementById('start').addEventListener('click', () => {
+            ballCount = parseInt(document.getElementById('ballCount').value);
+            shape = document.getElementById('shape').value;
+            initialAngle = parseInt(document.getElementById('angle').value);
+            delay = parseInt(document.getElementById('delay').value);
+            strokeColor = document.getElementById('strokeColor').value;
+            strokeThickness = parseInt(document.getElementById('strokeThickness').value);
+            circleSize = parseInt(document.getElementById('circleSize').value);
+            ballColor = document.getElementById('ballColor').value;
+            ballStrokeThickness = parseInt(document.getElementById('ballStrokeThickness').value);
+            ballSize = parseInt(document.getElementById('ballSize').value);
+            growthRate = parseInt(document.getElementById('growthRate').value);
+            gravity = parseFloat(document.getElementById('gravity').value);
+            speed = parseFloat(document.getElementById('speed').value);
+            trailThickness = parseInt(document.getElementById('trailThickness').value);
+            gravityOffTime = parseInt(document.getElementById('gravityOffTime').value);
+            bounceCounter = 0;
+            document.getElementById('bounceCounter').textContent = bounceCounter;
+            if (ballCount && ballCount > 0) {
+                createBalls(ballCount);
+                setTimeout(() => {
+                    running = true;
+                }, delay * (ballCount - 1));
+                if (gravityOff) {
+                    setTimeout(() => {
+                        gravityOff = true;
+                    }, gravityOffTime);
+                }
+            }
+        });
+
+        document.getElementById('reset').addEventListener('click', () => {
+            running = false;
+            gravityOff = false;
+            bounceCounter = 0;
+            document.getElementById('bounceCounter').textContent = bounceCounter;
+            createBalls(ballCount);
+        });
+
+        canvas.addEventListener('click', (event) => {
+            if (choosePosition) {
+                const rect = canvas.getBoundingClientRect();
+                startX = event.clientX - rect.left;
+                startY = event.clientY - rect.top;
+                document.getElementById('startX').value = startX;
+                document.getElementById('startY').value = startY;
+            }
+        });
+
+        document.getElementById('applyPosition').addEventListener('click', () => {
+            startX = parseInt(document.getElementById('startX').value);
+            startY = parseInt(document.getElementById('startY').value);
+        });
+
+        createBalls(1);
+        animate();
+    </script>
+</body>
+</html>
